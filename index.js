@@ -2,6 +2,11 @@ import express from 'express'
 import cors from 'cors'
 import { MongoClient, ObjectId } from 'mongodb';
 import 'dotenv/config'
+import Stripe from 'stripe';
+
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+
+
 const app = express();
 const port = process.env.PORT || 5000;
 app.use(express.json());
@@ -28,7 +33,7 @@ const database = client.db('pizzahub');
 const users = database.collection("user");
 const sessions= database.collection("session");
 const menuItems = database.collection('menuItems');
-
+const payments = database.collection("payments");
 app.get('/menuItems',async(req,res)=> {
    const query = {};
    if(req.query){
@@ -66,6 +71,17 @@ app.get('/menuItems',async(req,res)=> {
    const result = await cursor.toArray();
    res.send(result);
 })
+
+app.get('/menuItems/count',async(req,res)=> {
+    const query = {};
+    if(req.query.vendorId){
+        query.vendorId = req.query.vendorId;
+    }
+    const result = await menuItems.countDocuments(query);
+    res.send({count:result})
+})
+
+
 app.get('/menuItems/:id',async(req,res)=> {
     const id = req.params.id;
     const query = {_id: new ObjectId(id)};
@@ -99,6 +115,77 @@ app.patch("/menuItems/:id", async (req, res) => {
   const result = await menuItems.updateOne(filter, updateDoc);
   res.send(result);
 });
+
+
+// payment related apis
+app.post('/payments/checkout-verify',async(req,res)=> {
+    const {sessionId} = req.body;
+    if(!sessionId){
+        return res.status(400).send({success:false, message:'Session Id is required'})
+    }
+
+    const {status,payment_status,vendor_email,metadata,payment_intent} = await stripe.checkout.sessions.retrieve(sessionId);
+    if(status === 'complete' && payment_status==='paid'){
+        const sessionQuery = {sessionId};
+        const existingPayment = await payments.findOne(sessionQuery);
+        if(existingPayment){
+            return res.send({success:false, message:'Payment already verified'})
+        }
+        const payment = {
+            status,
+            payment_status,
+            vendor_email,
+            userId:metadata.userId,
+            payment_date: new Date(),
+            payment_intent,
+        }
+        const result = await payments.insertOne(payment);
+
+        // update user table
+        const query = {_id: new ObjectId(metadata.userId)}
+        const updateDoc = {
+            $set:{
+                premium:true,
+            }
+        }
+        const updateResult = await users.updateOne(
+            query,
+            updateDoc
+        )
+        res.send({success:true,result,updateResult});
+        return
+    }
+    res.send({success:false, message:'Payment verification failed'})
+
+})
+
+app.get("/payments", async (req, res) => {
+  try {
+    const query = {};
+    if (req.query.userId) {
+      query.userId = req.query.userId;
+    }
+
+    const result = await payments
+      .find(query)
+      .sort({ payment_date: -1 })
+      .toArray();
+
+    // console.log("GET /payments query:", query, "found:", result.length);
+    res.send(result);
+  } catch (error) {
+    console.error("Error fetching payments:", error);
+    res.status(500).send([]);
+  }
+});
+
+// user related apis
+app.get('/users/:id/premium',async(req,res)=>{
+  const id = req.params.id;
+  const query =  {_id: new ObjectId(id)};
+  const result = await users.findOne(query,{projection:{premium:1}});
+  res.send(result)
+})
 
 app.get('/',(req,res)=> {
     res.send("Hello world!")
