@@ -207,6 +207,18 @@ app.get("/orders",async(req,res)=> {
     res.send(result);
 })
 
+app.patch('/orders/:id/cancel',async(req,res)=> {
+    const id = req.params.id;
+    const filter = {_id: new ObjectId(id)};
+    const updateDoc = {
+        $set:{
+            status:"Cancelled",
+        },
+    };
+    const result = await orders.updateOne(filter,updateDoc);
+    res.send(result);
+})
+
 app.get('/',(req,res)=> {
     res.send("Hello world!")
 })
