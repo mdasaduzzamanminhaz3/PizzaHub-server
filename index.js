@@ -34,6 +34,7 @@ const users = database.collection("user");
 const sessions= database.collection("session");
 const menuItems = database.collection('menuItems');
 const payments = database.collection("payments");
+const orders = database.collection("oreders");
 app.get('/menuItems',async(req,res)=> {
    const query = {};
    if(req.query){
@@ -185,6 +186,25 @@ app.get('/users/:id/premium',async(req,res)=>{
   const query =  {_id: new ObjectId(id)};
   const result = await users.findOne(query,{projection:{premium:1}});
   res.send(result)
+})
+
+
+// oreder related apis
+app.post('/orders/create',async(req,res)=> {
+    const order = req.body;
+    const result = await orders.insertOne(order);
+    res.send(result);
+});
+
+app.get("/orders",async(req,res)=> {
+    const query = {};
+    if(req.query.CustomerId){
+        query.CustomerId = req.query.CustomerId;
+    }else if(req.query.customerEmail){
+        query.customerEmail = req.query.customerEmail;
+    }
+    const result = await orders.find(query).sort({_id:-1}).toArray();
+    res.send(result);
 })
 
 app.get('/',(req,res)=> {
