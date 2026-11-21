@@ -32,6 +32,18 @@ const menuItems = database.collection('menuItems');
 app.get('/menuItems',async(req,res)=> {
    const query = {};
    if(req.query){
+    if (req.query.vendorId) {
+        query.vendorId = req.query.vendorId;
+     }else if(req.query.admin ==="true" || req.query.status){
+        if(req.query.status && req.query.status !=="All"){
+            query.status = req.query.status
+        }
+     }
+     
+     else{
+        query.status = "Approved";
+        query.isActive = true;
+     }
     if(req.query.name){
         query.name = req.query.name;
     }
@@ -61,7 +73,7 @@ app.get('/menuItems/:id',async(req,res)=> {
     res.send(result);
 })
 
-app.delete('menuItems/:id',async(req,res)=> {
+app.delete('/menuItems/:id',async(req,res)=> {
     const id = req.params.id;
     const query = {_id: new ObjectId(id)};
     const result = await menuItems.deleteOne(query);
@@ -73,18 +85,20 @@ app.post('/menuItem/create',async(req,res)=> {
     const result = await menuItems.insertOne(menuItem);
     res.send(result);
 })
-app.patch('/menuItems/:id',async(req,res)=> {
-    const id = req.params.id;
-    const updateItem = req.body;
-    const filter = {_id: new ObjectId(id)};
-    const updateDoc = {
-        $set:{
-            ...updateItem
-        }
+app.patch("/menuItems/:id", async (req, res) => {
+  const id = req.params.id;
+  const { _id, ...updateItem } = req.body;
+  const allowedStatuses = ["Pending", "Approved", "Rejected"];
+    if (updateItem.status && !allowedStatuses.includes(updateItem.status)) {
+      return res.status(400).send({ message: "Invalid status value" });
     }
-    const result = await menuItems.updateOne(filter,updateDoc);
-    res.send(result);
-})
+  const filter = { _id: new ObjectId(id) };
+  const updateDoc = {
+    $set: updateItem,
+  };
+  const result = await menuItems.updateOne(filter, updateDoc);
+  res.send(result);
+});
 
 app.get('/',(req,res)=> {
     res.send("Hello world!")
