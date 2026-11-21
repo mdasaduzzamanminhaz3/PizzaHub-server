@@ -198,7 +198,9 @@ app.post('/orders/create',async(req,res)=> {
 
 app.get("/orders",async(req,res)=> {
     const query = {};
-    if(req.query.CustomerId){
+    if(req.query.vendorId){
+        query.vendorId = req.query.vendorId;
+    }else if(req.query.CustomerId){
         query.CustomerId = req.query.CustomerId;
     }else if(req.query.customerEmail){
         query.customerEmail = req.query.customerEmail;
@@ -218,6 +220,23 @@ app.patch('/orders/:id/cancel',async(req,res)=> {
     const result = await orders.updateOne(filter,updateDoc);
     res.send(result);
 })
+
+
+app.patch('/orders/:id/status', async(req,res)=> {
+    const id = req.params.id;
+    const {status} = req.body;
+    const allowedStatuses = ["Accepted","Rejected"];
+    if(!allowedStatuses.includes(status)){
+        return res.status(400).send({message:"Invalid order status"});
+    }
+    const filter = {_id: new ObjectId(id)};
+    const updateDoc = {
+        $set:{status},
+    };
+    const result = await orders.updateOne(filter,updateDoc);
+    res.send(result);
+})
+
 
 app.get('/',(req,res)=> {
     res.send("Hello world!")
