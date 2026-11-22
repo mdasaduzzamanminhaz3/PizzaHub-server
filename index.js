@@ -292,7 +292,7 @@ app.post('/orders/create',verifyToken,verifyCustomer,async(req,res)=> {
 });
 
 app.get("/orders",verifyToken,async(req,res)=> {
-    console.log("headers on the server: ", req.headers);
+    // console.log("headers on the server: ", req.headers);
     const query = {};
     if (req.query.vendorId) {
         query.vendorId = req.query.vendorId;
@@ -361,3 +361,5 @@ app.get('/',(req,res)=> {
 app.listen(port,()=> {
     console.log(`server is running on port ${port}`);
 })
+
+export default app;
