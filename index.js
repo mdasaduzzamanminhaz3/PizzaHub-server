@@ -35,6 +35,64 @@ const sessions= database.collection("session");
 const menuItems = database.collection('menuItems');
 const payments = database.collection("payments");
 const orders = database.collection("oreders");
+
+// middleware
+const verifyToken =async(req,res,next)=> {
+    const authHeader = req.headers.authorization;
+    if(!authHeader){
+        res.status(401).send({message:'Unauthorized'});
+        return;
+    }
+    const token = authHeader.split(' ')[1];
+    if(!token){
+        res.status(401).send({message:'Unauthorized'});
+        return;
+    }
+    const query = {token};
+    const session = await sessions.findOne(query);
+    if(!session){
+        res.status(401).send({message:'Unauthorized'});
+        return;
+    }
+    const userId = session.userId;
+    const userQuery = ObjectId.isValid(userId)
+        ? { $or: [{ _id: new ObjectId(userId) }, { id: String(userId) }] }
+        : { id: String(userId) };
+    const user = await users.findOne(userQuery);
+    if(!user){
+        res.status(401).send({message:'Unauthorized'});
+        return;
+    }
+    req.user = user;
+    next()
+}
+
+
+// must call this middleware after verifyToken
+const verifyCustomer = async(req,res,next)=> {
+    if(req.user.role !== 'customer'){
+        res.status(403).send({message:'Forbidden'});
+        return;
+    }
+    next();
+}
+const verifyVendor = async(req,res,next)=> {
+    if(req.user.role !== 'vendor'){
+        res.status(403).send({message:'Forbidden'});
+        return;
+    }
+    next();
+}
+const verifyAdmin = async(req,res,next)=> {
+    if(req.user.role !== 'admin'){
+        res.status(403).send({message:'Forbidden'});
+        return;
+    }
+    next();
+}
+
+
+
 app.get('/menuItems',async(req,res)=> {
    const query = {};
    if(req.query){
@@ -90,19 +148,19 @@ app.get('/menuItems/:id',async(req,res)=> {
     res.send(result);
 })
 
-app.delete('/menuItems/:id',async(req,res)=> {
+app.delete('/menuItems/:id',verifyToken,async(req,res)=> {
     const id = req.params.id;
     const query = {_id: new ObjectId(id)};
     const result = await menuItems.deleteOne(query);
     res.send(result);
 })
 
-app.post('/menuItem/create',async(req,res)=> {
+app.post('/menuItem/create',verifyToken,verifyVendor,async(req,res)=> {
     const menuItem = req.body;
     const result = await menuItems.insertOne(menuItem);
     res.send(result);
 })
-app.patch("/menuItems/:id", async (req, res) => {
+app.patch("/menuItems/:id", verifyToken,async (req, res) => {
   const id = req.params.id;
   const { _id, ...updateItem } = req.body;
   const allowedStatuses = ["Pending", "Approved", "Rejected"];
@@ -119,7 +177,7 @@ app.patch("/menuItems/:id", async (req, res) => {
 
 
 // payment related apis
-app.post('/payments/checkout-verify',async(req,res)=> {
+app.post('/payments/checkout-verify',verifyToken,async(req,res)=> {
     const {sessionId} = req.body;
     if(!sessionId){
         return res.status(400).send({success:false, message:'Session Id is required'})
@@ -160,7 +218,7 @@ app.post('/payments/checkout-verify',async(req,res)=> {
 
 })
 
-app.get("/payments", async (req, res) => {
+app.get("/payments", verifyToken,async (req, res) => {
   try {
     const query = {};
     if (req.query.userId) {
@@ -181,7 +239,7 @@ app.get("/payments", async (req, res) => {
 });
 
 // user related apis
-app.get('/users/:id/premium',async(req,res)=>{
+app.get('/users/:id/premium',verifyToken,async(req,res)=>{
   const id = req.params.id;
   const query =  {_id: new ObjectId(id)};
   const result = await users.findOne(query,{projection:{premium:1}});
@@ -189,14 +247,14 @@ app.get('/users/:id/premium',async(req,res)=>{
 })
 
 
-app.get('/users/:id',async(req,res)=> {
+app.get('/users/:id',verifyToken,async(req,res)=> {
     const id = req.params.id;
     const query = {_id: new ObjectId(id)};
     const result = await users.findOne(query);
     res.send(result);
 })
 
-app.patch("/users/:id", async (req, res) => {
+app.patch("/users/:id", verifyToken,async (req, res) => {
   const id = req.params.id;
   const { name, restaurantName, address, phone, image, role, blocked } =
     req.body;
@@ -227,26 +285,47 @@ app.get('/users',async(req,res)=>{
 
 
 // oreder related apis
-app.post('/orders/create',async(req,res)=> {
+app.post('/orders/create',verifyToken,verifyCustomer,async(req,res)=> {
     const order = req.body;
     const result = await orders.insertOne(order);
     res.send(result);
 });
 
-app.get("/orders",async(req,res)=> {
+app.get("/orders",verifyToken,async(req,res)=> {
+    console.log("headers on the server: ", req.headers);
     const query = {};
-    if(req.query.vendorId){
+    if (req.query.vendorId) {
         query.vendorId = req.query.vendorId;
-    }else if(req.query.CustomerId){
-        query.CustomerId = req.query.CustomerId;
-    }else if(req.query.customerEmail){
+    } else if (req.query.customerId || req.query.CustomerId) {
+        const custId = req.query.customerId || req.query.CustomerId;
+        query.$or = [{ customerId: custId }, { CustomerId: custId }];
+    } else if (req.query.customerEmail) {
         query.customerEmail = req.query.customerEmail;
     }
-    const result = await orders.find(query).sort({_id:-1}).toArray();
+    if(req.query.menuItemId){
+        const menuItemId = req.query.menuItemId;
+        if(!ObjectId.isValid(menuItemId)){
+            res.status(400).send({message:'Invalid menuItemId'});
+            return;
+        }
+        const menuItemQuery = {_id: new ObjectId(menuItemId)};
+        const menuItem = await menuItems.findOne(menuItemQuery);
+        if(!menuItem){
+            res.status(404).send({message:'Menu item not found'});
+            return;
+        }
+        if(String(menuItem.vendorId) !== String(req.user._id) && req.user.role !=="admin"){
+            res.status(403).send({message: `Forbidden`});
+            return;
+        }
+        query.menuItemId = menuItemId;
+    }
+    const cursor = orders.find(query);
+    const result = await cursor.toArray();
     res.send(result);
 })
 
-app.patch('/orders/:id/cancel',async(req,res)=> {
+app.patch('/orders/:id/cancel',verifyToken,verifyCustomer,async(req,res)=> {
     const id = req.params.id;
     const filter = {_id: new ObjectId(id)};
     const updateDoc = {
@@ -259,7 +338,7 @@ app.patch('/orders/:id/cancel',async(req,res)=> {
 })
 
 
-app.patch('/orders/:id/status', async(req,res)=> {
+app.patch('/orders/:id/status', verifyToken, verifyVendor,async(req,res)=> {
     const id = req.params.id;
     const {status} = req.body;
     const allowedStatuses = ["Accepted","Rejected"];
