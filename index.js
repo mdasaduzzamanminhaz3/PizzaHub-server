@@ -196,27 +196,34 @@ app.get('/users/:id',async(req,res)=> {
     res.send(result);
 })
 
-app.patch('/users/:id', async(req,res)=> {
-    const id =req.params.id;
-    const {name,restaurantName,address,phone,image} = req.body;
-    const updateFields = {
-        name,
-        restaurantName,
-        address,
-        phone,
-        updatedAt: new Date(),
-    };
-    if(image){
-        updateFields.image = image;
-    }
-    const result = await users.updateOne(
-        {_id: new ObjectId(id)},
-        {$set: updateFields}
-    );
-    res.send(result);
+app.patch("/users/:id", async (req, res) => {
+  const id = req.params.id;
+  const { name, restaurantName, address, phone, image, role, blocked } =
+    req.body;
 
+  const updateFields = {
+    updatedAt: new Date(),
+  };
+
+  if (name) updateFields.name = name;
+  if (restaurantName) updateFields.restaurantName = restaurantName;
+  if (address) updateFields.address = address;
+  if (phone) updateFields.phone = phone;
+  if (image) updateFields.image = image;
+  if (role) updateFields.role = role;
+  if (typeof blocked === "boolean") updateFields.blocked = blocked;
+
+  const result = await users.updateOne(
+    { _id: new ObjectId(id) },
+    { $set: updateFields }
+  );
+  res.send(result);
 });
 
+app.get('/users',async(req,res)=>{
+    const result = await users.find({}).sort({_id:-1}).toArray();
+    res.send(result);
+})
 
 
 // oreder related apis
