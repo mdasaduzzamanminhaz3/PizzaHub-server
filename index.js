@@ -176,6 +176,7 @@ app.patch("/menuItems/:id", verifyToken,async (req, res) => {
 });
 
 
+
 // payment related apis
 app.post('/payments/checkout-verify',verifyToken,async(req,res)=> {
     const {sessionId} = req.body;
@@ -254,29 +255,45 @@ app.get('/users/:id',verifyToken,async(req,res)=> {
     res.send(result);
 })
 
-app.patch("/users/:id", verifyToken,async (req, res) => {
+app.patch("/menuItems/:id", verifyToken, async (req, res) => {
   const id = req.params.id;
-  const { name, restaurantName, address, phone, image, role, blocked } =
-    req.body;
+  if (!ObjectId.isValid(id)) {
+    return res.status(400).send({ message: "Invalid ID" });
+  }
 
-  const updateFields = {
-    updatedAt: new Date(),
-  };
+  const filter = { _id: new ObjectId(id) };
+  const existingItem = await menuItems.findOne(filter);
+  if (!existingItem) {
+    return res.status(404).send({ message: "Item not found" });
+  }
 
-  if (name) updateFields.name = name;
-  if (restaurantName) updateFields.restaurantName = restaurantName;
-  if (address) updateFields.address = address;
-  if (phone) updateFields.phone = phone;
-  if (image) updateFields.image = image;
-  if (role) updateFields.role = role;
-  if (typeof blocked === "boolean") updateFields.blocked = blocked;
+  const currentUserId = String(req.user.id || req.user._id);
+  const isOwner = String(existingItem.vendorId) === currentUserId;
+  const isAdmin = req.user.role === "admin";
 
-  const result = await users.updateOne(
-    { _id: new ObjectId(id) },
-    { $set: updateFields }
-  );
+  if (!isOwner && !isAdmin) {
+    return res.status(403).send({ message: "Forbidden" });
+  }
+
+  const { _id, ...updateData } = req.body;
+
+  if (updateData.status) {
+    const allowedStatuses = ["Pending", "Approved", "Rejected"];
+    if (!allowedStatuses.includes(updateData.status)) {
+      return res.status(400).send({ message: "Invalid status value" });
+    }
+  }
+
+  if (updateData.price !== undefined) {
+    updateData.price = Number(updateData.price);
+  }
+
+  updateData.updatedAt = new Date().toISOString();
+
+  const result = await menuItems.updateOne(filter, { $set: updateData });
   res.send(result);
 });
+
 
 app.get('/users',async(req,res)=>{
     const result = await users.find({}).sort({_id:-1}).toArray();
