@@ -189,6 +189,35 @@ app.get('/users/:id/premium',async(req,res)=>{
 })
 
 
+app.get('/users/:id',async(req,res)=> {
+    const id = req.params.id;
+    const query = {_id: new ObjectId(id)};
+    const result = await users.findOne(query);
+    res.send(result);
+})
+
+app.patch('/users/:id', async(req,res)=> {
+    const id =req.params.id;
+    const {name,address,phone,image} = req.body;
+    const updateFields = {
+        name,
+        address,
+        phone,
+        updatedAt: new Date(),
+    };
+    if(image){
+        updateFields.image = image;
+    }
+    const result = await users.updateOne(
+        {_id: new ObjectId(id)},
+        {$set: updateFields}
+    );
+    res.send(result);
+
+});
+
+
+
 // oreder related apis
 app.post('/orders/create',async(req,res)=> {
     const order = req.body;
