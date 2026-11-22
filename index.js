@@ -198,9 +198,10 @@ app.get('/users/:id',async(req,res)=> {
 
 app.patch('/users/:id', async(req,res)=> {
     const id =req.params.id;
-    const {name,address,phone,image} = req.body;
+    const {name,restaurantName,address,phone,image} = req.body;
     const updateFields = {
         name,
+        restaurantName,
         address,
         phone,
         updatedAt: new Date(),
