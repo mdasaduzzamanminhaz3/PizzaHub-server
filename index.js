@@ -294,7 +294,32 @@ app.patch("/menuItems/:id", verifyToken, async (req, res) => {
   res.send(result);
 });
 
+app.patch("/users/:id", verifyToken, async (req, res) => {
+  try {
+    const id = req.params.id;
+    const filter = ObjectId.isValid(id)
+      ? { $or: [{ _id: new ObjectId(id) }, { id }] }
+      : { id };
 
+    const { name, restaurantName, phone, address, image } = req.body;
+
+    const updateDoc = {
+      $set: {
+        ...(name !== undefined && { name }),
+        ...(restaurantName !== undefined && { restaurantName }),
+        ...(phone !== undefined && { phone }),
+        ...(address !== undefined && { address }),
+        ...(image !== undefined && { image }),
+        updatedAt: new Date().toISOString(),
+      },
+    };
+
+    const result = await users.updateOne(filter, updateDoc);
+    res.send({ success: true, result });
+  } catch (error) {
+    res.status(500).send({ success: false, message: "Failed to update user" });
+  }
+});
 app.get('/users',async(req,res)=>{
     const result = await users.find({}).sort({_id:-1}).toArray();
     res.send(result);
